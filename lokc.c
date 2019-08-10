@@ -83,9 +83,10 @@ int handleKeyPress(XKeyEvent *keyEvent,
             enterPressed = 1;
             break;
         case XK_BackSpace:
+            *cursor = *cursor - 1;
             break;
         default:
-            // PASSWORD_BUFFER_SIZE - 1 -> Room for \n
+            // PASSWORD_BUFFER_SIZE - 1 -> Room for \0
             if ((numberOfChars + *cursor) > PASSWORD_BUFFER_SIZE - 1) {
                 printf("Waring: No more room in PasswordBuffer!\n");
             } else {
