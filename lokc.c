@@ -5,8 +5,8 @@
 #include <string.h>
 #include "lock.h"
 
-int main(void)
-{
+#define PASSWORD_BUFFER_SIZE 256
+int main(void) {
     Display *display;
     Window window;
     XEvent event;
@@ -15,8 +15,7 @@ int main(void)
     int s;
 
     display = XOpenDisplay(NULL);
-    if (display == NULL)
-    {
+    if (display == NULL) {
         fprintf(stderr, "Cannot open display\n");
         exit(1);
     }
@@ -42,10 +41,10 @@ int main(void)
     XMapRaised(display, window);
     long inputsToListenTo = ExposureMask | KeyPressMask | ButtonPressMask;
     XGrabKeyboard(display,
-            window,
-            0,
-            GrabModeAsync, GrabModeAsync, CurrentTime
-            );
+                  window,
+                  0,
+                  GrabModeAsync, GrabModeAsync, CurrentTime
+    );
     handleEvent(display);
     XSelectInput(display, window, inputsToListenTo);
     XDestroyWindow(display, window);
@@ -53,7 +52,8 @@ int main(void)
 
     return 0;
 }
-int isKeyNotRelevant(KeySym sym){
+
+int isKeyNotRelevant(KeySym sym) {
     return IsCursorKey(sym) ||
            IsFunctionKey(sym) ||
            IsKeypadKey(sym) ||
@@ -64,16 +64,16 @@ int isKeyNotRelevant(KeySym sym){
 
 
 int handleKeyPress(XKeyEvent *keyEvent,
-        char* passwordBuffer,
-        int* cursor
-        ) {
+                                char *passwordBuffer,
+                                int *cursor
+) {
     char keyBuffer[16];
     KeySym keySymbol;
     int numberOfChars = XLookupString(keyEvent,
-            keyBuffer,
-            sizeof(keyBuffer),
-            &keySymbol, 0);
-    if(isKeyNotRelevant(keySymbol)){
+                                      keyBuffer,
+                                      sizeof(keyBuffer),
+                                      &keySymbol, 0);
+    if (isKeyNotRelevant(keySymbol)) {
         return 0;
     }
     int enterPressed = 0;
@@ -85,35 +85,40 @@ int handleKeyPress(XKeyEvent *keyEvent,
         case XK_BackSpace:
             break;
         default:
-            strncpy(passwordBuffer + *cursor,
-                    keyBuffer,
-                    numberOfChars);
-            *cursor = (*cursor + numberOfChars);
+            // PASSWORD_BUFFER_SIZE - 1 -> Room for \n
+            if ((numberOfChars + *cursor) > PASSWORD_BUFFER_SIZE - 1) {
+                printf("Waring: No more room in PasswordBuffer!\n");
+            } else {
+                strncpy(passwordBuffer + *cursor,
+                        keyBuffer,
+                        numberOfChars);
+                *cursor = (*cursor + numberOfChars);
+            }
+
     }
     return enterPressed;
 }
 
 
-void handleEvent(Display *display){
+void handleEvent(Display *display) {
     XEvent event;
-    char passwordBuffer[256];
+    char passwordBuffer[PASSWORD_BUFFER_SIZE];
     int running = 1;
-    int enterPressed = 0;
     int cursor = 0;
-    while(running) {
+    int enterPressed = 0;
+    while (running) {
         XNextEvent(display, &event);
-        enterPressed = 0;
         switch (event.type) {
             case KeyPress:
                 enterPressed = handleKeyPress(&event.xkey,
-                        passwordBuffer,
-                        &cursor);
+                                              passwordBuffer,
+                                              &cursor);
                 break;
             case ButtonPress:
                 running = 0;
                 break;
         }
-        if(enterPressed){
+        if (enterPressed) {
             running = 0;
             printf("Passwd: %s\n", passwordBuffer);
         }
