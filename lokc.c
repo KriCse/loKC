@@ -4,8 +4,40 @@
 #include <stdlib.h>
 #include <string.h>
 #include "lock.h"
-
+#include <security/pam_appl.h>
 #define PASSWORD_BUFFER_SIZE 256
+
+int conversation(int num_msg, const struct pam_message **msg,
+                 struct pam_response **resp, void *appdata_ptr) {
+    if(num_msg <= 0 ){
+        return PAM_CONV_ERR;
+    }
+    struct pam_response *response = (struct pam_response *) malloc(num_msg * sizeof(struct pam_response));
+    if (response == NULL){
+        fprintf(stderr, "Can not allocate Resource");
+        return PAM_CONV_ERR;
+    }
+    for (int i = 0; i < num_msg; ++i) {
+        if (msg[i]->msg_style != PAM_PROMPT_ECHO_OFF &&
+            msg[i]->msg_style != PAM_PROMPT_ECHO_ON)
+            continue;
+        char* pass = "test";
+        response[i].resp_retcode = 0;
+        response[i].resp = (char *)malloc(strlen(pass) + 1);
+        strcpy(response[i].resp, pass);
+        if(response[i].resp == NULL){
+            return PAM_CONV_ERR;
+        }
+    }
+    *resp = response;
+    return PAM_SUCCESS;
+}
+
+static struct pam_conv conv = {
+        conversation,
+        NULL
+};
+
 int main(void) {
     Display *display;
     Window window;
