@@ -1,62 +1,45 @@
-#include <X11/Xlib.h>
-#include <X11/Xutil.h>
+
+#include <security/pam_appl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "lock.h"
-#include <security/pam_appl.h>
-#define PASSWORD_BUFFER_SIZE 256
-
-int conversation(int num_msg, const struct pam_message **msg,
-                 struct pam_response **resp, void *appdata_ptr) {
-    if(num_msg <= 0 ){
-        return PAM_CONV_ERR;
-    }
-    struct pam_response *response = (struct pam_response *) malloc(num_msg * sizeof(struct pam_response));
-    if (response == NULL){
-        fprintf(stderr, "Can not allocate Resource");
-        return PAM_CONV_ERR;
-    }
-    for (int i = 0; i < num_msg; ++i) {
-        if (msg[i]->msg_style != PAM_PROMPT_ECHO_OFF &&
-            msg[i]->msg_style != PAM_PROMPT_ECHO_ON)
-            continue;
-        char* pass = "test";
-        response[i].resp_retcode = 0;
-        response[i].resp = (char *)malloc(strlen(pass) + 1);
-        strcpy(response[i].resp, pass);
-        if(response[i].resp == NULL){
-            return PAM_CONV_ERR;
-        }
-    }
-    *resp = response;
-    return PAM_SUCCESS;
-}
-
-static struct pam_conv conv = {
-        conversation,
-        NULL
-};
+#include "pam_manager.h"
+#include <unistd.h>
+char* passwordBuffer;
 
 int main(void) {
+    pam_handle_t *handle = NULL;
+    passwordBuffer = (char *) malloc(PASSWORD_BUFFER_SIZE);
+    if(passwordBuffer == NULL){
+        fprintf(stderr, "Cannot allocate passwordBuffer\n");
+        return EXIT_FAILURE;
+    }
+    char username[32];
+    int error  = getlogin_r(username, 32);
+    if(error){
+        return  0;
+    }
+    if (!startPam(&handle, username)) {
+        fprintf(stderr, "Cannot start Pam");
+        return EXIT_FAILURE;
+    }
+
     Display *display;
     Window window;
-    XEvent event;
     XSetWindowAttributes windowAttributes;
-    char *msg = "Hello, World!";
-    int s;
-
+    int screenNumber;
     display = XOpenDisplay(NULL);
     if (display == NULL) {
         fprintf(stderr, "Cannot open display\n");
         exit(1);
     }
 
-    s = DefaultScreen(display);
-    windowAttributes.background_pixel = WhitePixel(display, s);
-    windowAttributes.border_pixel = BlackPixel(display, s);
+    screenNumber = DefaultScreen(display);
+    windowAttributes.background_pixel = WhitePixel(display, screenNumber);
+    windowAttributes.border_pixel = BlackPixel(display, screenNumber);
     windowAttributes.override_redirect = 1;
-    Window rootWindow = RootWindow(display, s);
+    Window rootWindow = RootWindow(display, screenNumber);
     unsigned long valueMask = CWBackPixel | CWBorderPixel | CWOverrideRedirect;
     window = XCreateWindow(display, // display
                            rootWindow, // parent
@@ -65,7 +48,7 @@ int main(void) {
                            1000, // w
                            1000, // h
                            1, //bw
-                           DefaultDepth(display, s), //d
+                           DefaultDepth(display, screenNumber), //d
                            CopyFromParent, // class
                            DefaultVisual(display, rootWindow),
                            valueMask,
@@ -77,7 +60,9 @@ int main(void) {
                   0,
                   GrabModeAsync, GrabModeAsync, CurrentTime
     );
-    handleEvent(display);
+    printf("username %s\n", username);
+
+    handleEvent(display, &handle);
     XSelectInput(display, window, inputsToListenTo);
     XDestroyWindow(display, window);
     XCloseDisplay(display);
@@ -96,8 +81,7 @@ int isKeyNotRelevant(KeySym sym) {
 
 
 int handleKeyPress(XKeyEvent *keyEvent,
-                                char *passwordBuffer,
-                                int *cursor
+                   int *cursor
 ) {
     char keyBuffer[16];
     KeySym keySymbol;
@@ -132,19 +116,18 @@ int handleKeyPress(XKeyEvent *keyEvent,
     return enterPressed;
 }
 
-
-void handleEvent(Display *display) {
+void handleEvent(Display *display, pam_handle_t** handle) {
     XEvent event;
-    char passwordBuffer[PASSWORD_BUFFER_SIZE];
     int running = 1;
     int cursor = 0;
     int enterPressed = 0;
+
     while (running) {
+        enterPressed = 0;
         XNextEvent(display, &event);
         switch (event.type) {
             case KeyPress:
                 enterPressed = handleKeyPress(&event.xkey,
-                                              passwordBuffer,
                                               &cursor);
                 break;
             case ButtonPress:
@@ -152,9 +135,15 @@ void handleEvent(Display *display) {
                 break;
         }
         if (enterPressed) {
-            running = 0;
-            printf("Passwd: %s\n", passwordBuffer);
+            if (isPasswordCorrect(handle)) {
+                printf("Password Correct \n");
+                running = 0;
+            } else {
+                printf("Password Incorrect \n");
+            }
+            cursor = 0;
         }
     }
 }
+
 
