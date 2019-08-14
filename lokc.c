@@ -5,6 +5,7 @@
 #include <string.h>
 #include "lock.h"
 #include "pam_manager.h"
+#include "lock_window.h"
 #include <unistd.h>
 char* passwordBuffer;
 
@@ -18,22 +19,25 @@ int main(void) {
     char username[32];
     int error  = getlogin_r(username, 32);
     if(error){
-        return  0;
+        fprintf(stderr, "Cannot get username");
+        return  EXIT_FAILURE;
     }
     if (!startPam(&handle, username)) {
         fprintf(stderr, "Cannot start Pam");
         return EXIT_FAILURE;
     }
 
-    Display *display;
+    Display* display = getDisplay();
+    const int numberOfScreens = ScreenCount(display);
+    Window windows[numberOfScreens];
+    for (int i = 0; i < numberOfScreens; ++i) {
+        windows[i] = createWindow(display, i);
+    }
+    printf("Number of Screens %d", numberOfScreens);
     Window window;
     XSetWindowAttributes windowAttributes;
     int screenNumber;
-    display = XOpenDisplay(NULL);
-    if (display == NULL) {
-        fprintf(stderr, "Cannot open display\n");
-        exit(1);
-    }
+    return 0;
 
     screenNumber = DefaultScreen(display);
     windowAttributes.background_pixel = WhitePixel(display, screenNumber);
